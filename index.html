@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guatemala 21-daagse Backpack Route – Interactieve Kaart</title>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .app { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
+    .sidebar { padding: 14px 16px; overflow-y: auto; border-right: 1px solid #e5e7eb; background: #fafafa; }
+    .sidebar h1 { font-size: 20px; margin: 0 0 10px; }
+    .sidebar p { margin: 6px 0 10px; color: #374151; font-size: 14px; }
+    .legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+    .badge { font-size: 12px; padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 999px; background: white; cursor: default; }
+    .controls { display: flex; gap: 8px; margin: 10px 0 12px; }
+    .controls button { cursor: pointer; font-size: 13px; padding: 8px 10px; border-radius: 10px; border: 1px solid #e5e7eb; background: white; }
+    .controls button.active { background: #111827; color: white; border-color: #111827; }
+    .stop { border: 1px solid #e5e7eb; background: white; border-radius: 12px; padding: 10px; margin: 8px 0; transition: box-shadow .2s, transform .05s; }
+    .stop:hover { box-shadow: 0 6px 16px rgba(0,0,0,.08); transform: translateY(-1px); }
+    .stop h3 { font-size: 15px; margin: 0 0 6px; display: flex; align-items: center; justify-content: space-between; }
+    .stop .meta { font-size: 12px; color: #4b5563; }
+    .stop .tags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag { font-size: 11px; padding: 3px 6px; background: #f3f4f6; border-radius: 6px; border: 1px solid #e5e7eb; text-transform: capitalize; }
+    .map { height: 100%; width: 100%; }
+    .footer { font-size: 12px; color: #6b7280; margin-top: 14px; }
+
+    .icon-pin { background: transparent; width: 26px; height: 26px; position: relative; }
+    .icon-pin svg { width: 26px; height: 26px; display: block; }
+
+    .leaflet-tooltip.custom { background: white; color: #111827; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+    .leaflet-tooltip.custom .ttitle { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+    .leaflet-tooltip.custom .tbody { font-size: 12px; color: #374151; }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 44% 56%; }
+      .sidebar { order: 2; }
+      .map { order: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>Guatemala – Interactieve Kaart (21 dagen)</h1>
+      <p>Beweeg met je muis over een marker of lijstitem om details te zien. Filter per week om je nachten te plannen. Tip: voeg extra nachten toe bij Lago Atitlán en El Paredón.</p>
+      <div class="legend">
+        <span class="badge">Feest</span>
+        <span class="badge">Natuur</span>
+        <span class="badge">Vulkaan</span>
+        <span class="badge">Surf</span>
+        <span class="badge">Optioneel</span>
+      </div>
+      <div class="controls">
+        <button data-week="all" class="active">Alles</button>
+        <button data-week="1">Week 1</button>
+        <button data-week="2">Week 2</button>
+        <button data-week="3">Week 3</button>
+      </div>
+      <div id="stopsList"></div>
+      <div class="footer">Klik op een stop om erheen te vliegen. Tooltips verschijnen bij hover.</div>
+    </aside>
+    <div id="map" class="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    // --- Data (vertaald, zonder dag-aanduidingen; Flores als optioneel)
+    const stops = [
+      { id: 'gua', name: 'Guatemala-Stad (GUA)', coords: [14.6349, -90.5069], week: 1, kind: ['hub'], notes: 'Internationale aankomst. Maak dat je wegkomt hier. Kankersaai.' },
+      { id: 'flo', name: 'Flores – Los Amigos Hostel (optioneel)', coords: [16.9230, -89.8920], week: 1, kind: ['feest','natuur','optioneel'], notes: 'Zoals er staat, deze is optioneel omdat die zo ver weg ligt van de rest. Ik kwam uit het Oosten dus voor mij was het een logische stop. Schitterend hostel (met prive kamers) en hele mooie zuip cultuur. Vanaf hier kun je ook heel gemakklijk naar de grootste Inca stad ter wereld (denkik) genaamt Tikal).' },
+      { id: 'tik', name: 'Tikal Nationaal Park', coords: [17.2210, -89.6230], week: 1, kind: ['natuur'], notes: 'Zonsopkomst- of zonsondergangtour. Reusachtige Maya-ruïnes in de jungle.' },
+      { id: 'lan', name: 'Lanquín – Zephyr Lodge', coords: [15.5657, -89.9840], week: 1, kind: ['feest','natuur'], notes: 'Leip mooi uitzicht. Ziek veel zuipen, spelletjes als beerpong enzo, hot tub, infinity pool met bar (meer zuipen) FUCKING mooi uitzicht. Deze zou ik niet overslaan. Je kunt vanaf hier naar Semuc Champey, een heel mooi nationaal park. Daarna kom je weer terug om meer te zuipem.' },
+      { id: 'sem', name: 'Semuc Champey', coords: [15.5334, -90.1246], week: 1, kind: ['natuur'], notes: 'Turquoise poelen, grotten en touwswing. Tour vanaf Lanquín.' },
+      { id: 'ant', name: 'Antigua – Tropicana Hostel', coords: [14.5560, -90.7340], week: 2, kind: ['feest','vulkaan'], notes: '2e leukste hostel waar ik ben geweest. Prive kamers zijn hier beschikbaar als het goed is. Je kunt vanaf hier ook de vulkaan hike boeken. Tering mooi. Heel. Veel. Zuipen. Vanaf hier kun je als je geluk hebt ook naar de pool rave ( in een leeg zwembad) of de mansion rave (in een zieke mansion). Ik zou de feesten overgeetbaar noemen, maar ik had zoveel pillen op dat ik letterlijk alles ben vergeten. kankermooi. Niet overslaan.' },
+      { id: 'aca', name: 'Acatenango Vulkanenkamp', coords: [14.5011, -90.8770], week: 2, kind: ['vulkaan','natuur'], notes: 'Deze is vooral leuk voor Keven. overnachten is de enige optie, en je gaat niet lekker slapen. Met zijn 20 in een kleine kamer, snurkende mensen, harde wind want je zit op 3km hoogte op een slapende vulkaan naast die niet-slapende vulkaan die de hele tijd uitbarst wat je ook wakkerhoudt. kankervulkaan=kankermooi. niet overslaan.' },
+      { id: 'sanp', name: 'Lago Atitlán – San Pedro La Laguna', coords: [14.6920, -91.2710], week: 2, kind: ['feest','natuur'], notes: 'Partybasis aan het meer. Mr. Mullets, Hostal Fe, live muziek en bars.' },
+      { id: 'sanm', name: 'Lago Atitlán – San Marcos La Laguna', coords: [14.7203, -91.2527], week: 2, kind: ['natuur'], notes: 'paddestoelen bikken. kankermooi' },
+      { id: 'sant', name: 'Lago Atitlán – Santa Cruz', coords: [14.7401, -91.1938], week: 2, kind: ['natuur'], notes: 'Helder water, grote uitzichten, duikspots. Fijne lunchstop.' },
+      { id: 'elp', name: 'El Paredón – Driftwood Surfer', coords: [13.9160, -90.7790], week: 3, kind: ['feest','surf'], notes: 'Leukste hostel. prive kamers beschikbaar. Ziek hard zuipen hier. Dat is letterlijk het enige wat je hier kunt doen. Niets anders. Klinkt saai, maar is kankermooi' },
+      { id: 'back', name: 'Terug naar Guatemala-Stad', coords: [14.6349, -90.5069], week: 3, kind: ['hub'], notes: 'Shuttle ca. 3 uur vanaf El Paredón voor je vlucht.' }
+    ];
+
+    // --- Kaart
+    const map = L.map('map', { zoomControl: true, scrollWheelZoom: true });
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+
+    const bounds = L.latLngBounds(stops.map(s => s.coords));
+    map.fitBounds(bounds.pad(0.2));
+
+    // --- Icons
+    function svgPin(fill) {
+      return `<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7z" fill="${fill}"/><circle cx="12" cy="9" r="3.2" fill="white"/></svg>`;
+    }
+    const colors = {
+      hub: '#6b7280',
+      feest: '#ef4444',
+      natuur: '#10b981',
+      vulkaan: '#f59e0b',
+      surf: '#3b82f6',
+      optioneel: '#8b5cf6'
+    };
+
+    function colorForStop(s) {
+      const priority = ['feest','vulkaan','surf','natuur','optioneel','hub'];
+      const k = (s.kind || []).find(t => priority.includes(t)) || 'hub';
+      return colors[k] || colors['hub'];
+    }
+
+    function makeIcon(color) {
+      return L.divIcon({ className: 'icon-pin', html: svgPin(color), iconSize: [26, 26], iconAnchor: [13, 26], tooltipAnchor: [0, -26] });
+    }
+
+    // --- Markers
+    const markerById = new Map();
+    const groupAll = L.featureGroup().addTo(map);
+
+    stops.forEach((s) => {
+      const m = L.marker(s.coords, { icon: makeIcon(colorForStop(s)) }).addTo(groupAll);
+      m.bindTooltip(`<div class="ttitle">${s.name}</div><div class="tbody">${s.notes}</div>`, { direction: 'top', offset: [0, -10], className: 'custom', opacity: 0.95 });
+      m.on('mouseover', () => highlightStop(s.id));
+      m.on('mouseout', () => clearHighlight());
+      m.on('click', () => { map.flyTo(m.getLatLng(), 10, { duration: 0.6 }); openTooltipFor(s.id); focusListItem(s.id); });
+      markerById.set(s.id, m);
+    });
+
+    // --- Route (volgorde met Flores als optioneel onderdeel)
+    const order = ['gua','flo','tik','flo','lan','sem','lan','ant','aca','ant','sanp','sanm','sant','sanp','elp','back'];
+    const routeCoords = order.map(id => stops.find(s => s.id === id)?.coords).filter(Boolean);
+    const route = L.polyline(routeCoords, { weight: 3, opacity: 0.8 }).addTo(map);
+
+    // --- Lijst in de sidebar
+    const listEl = document.getElementById('stopsList');
+    function renderList(filterWeek = 'all') {
+      listEl.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const filtered = stops.filter(s => filterWeek === 'all' ? true : s.week === Number(filterWeek));
+      filtered.forEach((s) => {
+        const div = document.createElement('div');
+        div.className = 'stop';
+        div.dataset.id = s.id;
+        const weekLabel = `Week ${s.week}`;
+        div.innerHTML = `
+          <h3>
+            <span>${s.name}</span>
+            <span class="meta">${weekLabel}</span>
+          </h3>
+          <div class="meta">${s.notes}</div>
+          <div class="tags">${(s.kind||[]).map(k => `<span class=\"tag\">${k}</span>`).join('')}</div>
+        `;
+        div.addEventListener('mouseenter', () => { openTooltipFor(s.id); markerById.get(s.id).setZIndexOffset(1000); });
+        div.addEventListener('mouseleave', () => { clearHighlight(); markerById.get(s.id).setZIndexOffset(0); });
+        div.addEventListener('click', () => { map.flyTo(markerById.get(s.id).getLatLng(), 9, { duration: 0.6 }); openTooltipFor(s.id); });
+        frag.appendChild(div);
+      });
+      listEl.appendChild(frag);
+    }
+
+    function openTooltipFor(id) { const m = markerById.get(id); if (!m) return; m.openTooltip(); focusListItem(id); }
+    function highlightStop(id) { const el = [...document.querySelectorAll('.stop')].find(x => x.dataset.id === id); if (el) el.style.outline = '2px solid #111827'; }
+    function clearHighlight() { document.querySelectorAll('.stop').forEach(x => x.style.outline = ''); }
+    function focusListItem(id) { clearHighlight(); const el = [...document.querySelectorAll('.stop')].find(x => x.dataset.id === id); if (el) { el.style.outline = '2px solid #111827'; el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
+
+    // Weekfilter
+    const controls = document.querySelectorAll('.controls button');
+    controls.forEach(btn => btn.addEventListener('click', () => {
+      controls.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const wk = btn.dataset.week;
+      markerById.forEach((m, id) => {
+        const s = stops.find(x => x.id === id);
+        const visible = wk === 'all' ? true : s.week === Number(wk);
+        if (visible) { if (!map.hasLayer(m)) m.addTo(groupAll); } else { if (map.hasLayer(m)) groupAll.removeLayer(m); }
+      });
+      const idsVisible = stops.filter(s => wk === 'all' ? true : s.week === Number(wk)).map(s => s.id);
+      const newCoords = order.filter(id => idsVisible.includes(id)).map(id => stops.find(s => s.id === id)?.coords).filter(Boolean);
+      route.setLatLngs(newCoords);
+      renderList(wk);
+      const visibleMarkers = stops.filter(s => wk === 'all' ? true : s.week === Number(wk));
+      if (visibleMarkers.length) { const b = L.latLngBounds(visibleMarkers.map(s => s.coords)); map.fitBounds(b.pad(0.25)); }
+    }));
+
+    // Eerste render
+    renderList('all');
+  </script>
+</body>
+</html>
